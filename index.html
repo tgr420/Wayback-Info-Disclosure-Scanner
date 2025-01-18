@@ -50,26 +50,29 @@
       ".asc"
     ];
 
+    const corsProxy = "https://cors-anywhere.herokuapp.com/";
     const scanButton = document.getElementById("scan");
     const resultsDiv = document.getElementById("results");
 
+    const domainRegex = /^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
     scanButton.addEventListener("click", async () => {
       const domain = document.getElementById("domain").value.trim();
-      if (!domain) {
-        resultsDiv.innerHTML = "<p style='color: red;'>Please enter a domain name.</p>";
+      if (!domainRegex.test(domain)) {
+        resultsDiv.innerHTML = "<p style='color: red;'>Invalid domain name. Please enter a valid domain (e.g., example.com).</p>";
         return;
       }
 
       resultsDiv.innerHTML = "<p class='loading'>Scanning... Please wait.</p>";
 
       try {
-        // Fetch URLs from Wayback Machine
-        const waybackApi = `https://web.archive.org/cdx/search/cdx?url=*.${domain}&collapse=urlkey&output=text&fl=original`;
-        const waybackResponse = await fetch(waybackApi);
+        const waybackApi = `${corsProxy}https://web.archive.org/cdx/search/cdx?url=*.${domain}&collapse=urlkey&output=text&fl=original`;
+        const waybackResponse = await fetch(waybackApi, {
+          headers: { "User-Agent": "Mozilla/5.0" },
+        });
         const waybackData = await waybackResponse.text();
         const urls = waybackData.split("\n");
 
-        // Filter URLs by extensions
         const filteredUrls = urls.filter(url => extensions.some(ext => url.endsWith(ext)));
         if (filteredUrls.length === 0) {
           resultsDiv.innerHTML = "<p>No interesting URLs found.</p>";
@@ -79,10 +82,8 @@
         let results = [];
         for (const url of filteredUrls) {
           try {
-            // Check if the live URL is 404
-            const liveResponse = await fetch(url, { method: "HEAD" });
+            const liveResponse = await fetch(corsProxy + url, { method: "HEAD" });
             if (liveResponse.status === 404) {
-              // Fetch the snapshot from Wayback Machine
               const snapshotUrl = `https://web.archive.org/web/${url}`;
               const snapshotResponse = await fetch(snapshotUrl);
 
