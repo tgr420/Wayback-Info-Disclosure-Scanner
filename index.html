@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wayback Info Disclosure Scanner</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 10px;
+      font-size: 16px;
+    }
+    .loading {
+      margin-top: 20px;
+      font-style: italic;
+    }
+    #results {
+      margin-top: 20px;
+      text-align: left;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    pre {
+      background-color: #f4f4f4;
+      padding: 10px;
+      border: 1px solid #ddd;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Wayback Info Disclosure Scanner</h1>
+  <p>Enter a domain name to scan for potential information disclosure vulnerabilities.</p>
+  <input type="text" id="domain" placeholder="example.com" />
+  <button id="scan">Scan Domain</button>
+  <div id="results"></div>
+
+  <script>
+    const extensions = [
+      ".xls", ".xml", ".xlsx", ".json", ".pdf", ".sql", ".doc", ".docx", ".pptx",
+      ".txt", ".zip", ".tar.gz", ".tgz", ".bak", ".7z", ".rar", ".log", ".cache",
+      ".secret", ".db", ".backup", ".yml", ".gz", ".config", ".csv", ".yaml", ".md",
+      ".md5", ".exe", ".dll", ".bin", ".ini", ".bat", ".sh", ".tar", ".deb", ".rpm",
+      ".iso", ".img", ".apk", ".msi", ".dmg", ".tmp", ".crt", ".pem", ".key", ".pub", 
+      ".asc"
+    ];
+
+    const scanButton = document.getElementById("scan");
+    const resultsDiv = document.getElementById("results");
+
+    scanButton.addEventListener("click", async () => {
+      const domain = document.getElementById("domain").value.trim();
+      if (!domain) {
+        resultsDiv.innerHTML = "<p style='color: red;'>Please enter a domain name.</p>";
+        return;
+      }
+
+      resultsDiv.innerHTML = "<p class='loading'>Scanning... Please wait.</p>";
+
+      try {
+        // Fetch URLs from Wayback Machine
+        const waybackApi = `https://web.archive.org/cdx/search/cdx?url=*.${domain}&collapse=urlkey&output=text&fl=original`;
+        const waybackResponse = await fetch(waybackApi);
+        const waybackData = await waybackResponse.text();
+        const urls = waybackData.split("\n");
+
+        // Filter URLs by extensions
+        const filteredUrls = urls.filter(url => extensions.some(ext => url.endsWith(ext)));
+        if (filteredUrls.length === 0) {
+          resultsDiv.innerHTML = "<p>No interesting URLs found.</p>";
+          return;
+        }
+
+        let results = [];
+        for (const url of filteredUrls) {
+          try {
+            // Check if the live URL is 404
+            const liveResponse = await fetch(url, { method: "HEAD" });
+            if (liveResponse.status === 404) {
+              // Fetch the snapshot from Wayback Machine
+              const snapshotUrl = `https://web.archive.org/web/${url}`;
+              const snapshotResponse = await fetch(snapshotUrl);
+
+              if (snapshotResponse.ok) {
+                results.push({
+                  url,
+                  snapshot: snapshotUrl,
+                  status: "Potential Disclosure"
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`Error checking URL ${url}:`, err);
+          }
+        }
+
+        if (results.length > 0) {
+          resultsDiv.innerHTML = `
+            <h3>Results:</h3>
+            <pre>${JSON.stringify(results, null, 2)}</pre>
+          `;
+        } else {
+          resultsDiv.innerHTML = "<p>No potential disclosures found.</p>";
+        }
+      } catch (err) {
+        console.error("Error during scanning:", err);
+        resultsDiv.innerHTML = "<p style='color: red;'>An error occurred during the scan. Check the console for details.</p>";
+      }
+    });
+  </script>
+</body>
+</html>
